@@ -1,264 +1,156 @@
-# 🗒️ 모노 다이어리 ( Android / Jetpack Compose )
+# 🗒️ 모노 다이어리
 
-> 모노톤 감성의 개인 다이어리 Android Application 입니다.
-> 
-> 폴더 분류 / 타임라인 / 일기 작성 기능을 제공하며,
-> 
-> Jetpack Compose / Clean Architecture / MVVM 기반으로 구현 되었습니다.
+> 하루를 기록하는 가장 단순한 방법 — 모노톤 감성의 개인 다이어리 Android 앱
 
----
- 
-## 🧩 기술 스택
-
-### 🛠️ 개발 언어 & 코어
-- **Kotlin 1.9.x**
-- **Gradle KTS** 기반 빌드 구성
-
-### 🎨 UI & UX
-- **Jetpack Compose**
-- Material3 + Custom Theme
-- Drawer / Bottom Navigation
-- Modal BottomSheet, LazyColumn
-
-### 🧱 아키텍처
-- **Clean Architecture**
-- **MVVM**
-- 단방향 Data Flow(StateFlow 기반)
-
-### 💾 데이터 & 저장소
-- **Room** (User / Diary / Folder Entity)
-- **DataStore Preferences** (자동 로그인)
-
-### 🔌 의존성 주입(DI)
-- **Hilt** + Hilt Navigation Compose
-
-### 🔐 인증 & 보안
-- **BCrypt** 기반 비밀번호 해시 처리
+- **개발 형태:** 1인 개발 (기획 · 디자인 · 개발)
+- **기간:** 2025.11 과제(약 1개월, [`v1.0-assignment`](https://github.com/its10623/Mono_Diary/tree/v1.0-assignment)) → 2026.08~ 기능 추가 및 개선
+- **스택:** Kotlin · Jetpack Compose · Hilt · Room · DataStore · Coroutines/Flow
 
 ---
 
-## 🧪 실행 방법
+## 📱 스크린샷
 
-### 1. Android Studio 설치
-최신 Android Studio(Flamingo 이상) 설치
-
-### 2. 빌드
-Terminal 또는 IDE에서:
-./gradlew assembleDebug
-
-### 3. 실행
-에뮬레이터 또는 실제 기기에서 실행
-
-### 4. 첫 실행 후
-- 회원가입 → 로그인  
-- 자동 로그인 사용 시 DataStore에 저장됨  
+| 시작 | 로그인 | 타임라인 |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/01_splash.jpg" width="220"/> | <img src="docs/screenshots/02_login.jpg" width="220"/> | <img src="docs/screenshots/03_timeline.jpg" width="220"/> |
+| **폴더 드로어** | **일기 작성** | **일기 상세** |
+| <img src="docs/screenshots/04_drawer.jpg" width="220"/> | <img src="docs/screenshots/05_editor.jpg" width="220"/> | <img src="docs/screenshots/06_detail.jpg" width="220"/> |
 
 ---
 
-## 🔄 다이어리 기능 흐름도
+## ✨ 핵심 구현 포인트
 
-### 🔐 로그인 흐름
-UI(LoginScreen)  
-→ ViewModel(LoginViewModel)  
-→ LoginUseCase  
-→ UserRepository  
-→ Room(UserEntity)
-
-자동 로그인:  
-UI → DataStore → tryAutoLogin()
-
----
-
-### 📄 다이어리 생성 흐름
-EditorScreen  
-→ DiaryViewModel  
-→ DiaryUseCase  
-→ DiaryRepository  
-→ Room(DiaryEntity)
-
----
-
-### 🔎 필터 흐름
-FilterBottomSheet  
-→ DiaryViewModel.applyFilter()  
-→ StateFlow 업데이트  
-→ Timeline/Folder 화면 자동 반영
-
-- 타임라인 필터는 타임라인만 적용
-- 폴더 필터는 폴더만 적용 (FilterScope 기반)
+- **Clean Architecture + MVVM** — Presentation / Domain / Data 3계층 분리. `DiaryUseCase`와 Validator를 인터페이스로 두고 Hilt로 주입해 일기·폴더 입력 검증을 UI와 DB에서 독립
+- **Room + Flow 반응형 목록** — DAO가 `Flow`를 반환하고 ViewModel에서 `combine`으로 정렬·날짜 필터를 조합. 타임라인/폴더 화면의 필터 상태는 `FilterScope`로 분리 → [트러블슈팅 1](#ts-1)
+- **인증** — BCrypt 비밀번호 해시, DataStore 기반 자동 로그인, Credential Manager 기반 Google 로그인 → [트러블슈팅 2](#ts-2)
+- **상태 호이스팅으로 UI 불일치 해결** — 시스템 뒤로가기 시 드로어 선택 표시가 어긋나던 문제를 route 기반 파생 상태로 수정 → [트러블슈팅 4](#ts-4)
 
 ---
 
 ## 🚀 주요 기능
 
-### 👤 사용자 기능
-- 회원가입 / 로그인
-- 자동 로그인(DataStore 기반)
-- 저장된 UserName 데이터 기반으로 비밀번호 변경
-- 로그아웃
+**사용자**
+- 회원가입 / 로그인 / 로그아웃
+- Google 로그인
+- 자동 로그인
+- 비밀번호 재설정
 
-### 📝 다이어리 기능
-- Timline 기반 다이어리 Preview
+**다이어리**
+- 타임라인 (날짜별 그룹)
 - 일기 작성 / 수정 / 삭제
-- Custom 폴더별 분류
-- 즐겨찾기(Favorites)
-- 검색 기능 (타임라인/폴더 각각 독립 검색)
-- 정렬 (최신순 / 오래된순)
-- 날짜 필터 (LocalDate 기반, 화면별 독립 필터)
-- 폴더 생성 및 삭제 기능
+- 폴더 생성 / 이름 변경 / 삭제
+- 즐겨찾기
+- 검색 (타임라인/폴더 각각 독립)
+- 정렬 (최신순 / 오래된순), 날짜 필터 (화면별 독립)
 
-### 🎨 UI/UX
-- Jetpack Compose 기반 UI
-- Drawer Navigation
-- Bottom Navigation
-- Modal BottomSheet 필터 기능
-- LazyColumn 기반 다이어리 뷰 화면
-- 에디터 화면에서 실시간 상태 관리
+> 달력·프로필 탭과 드로어의 설정·휴지통 메뉴는 UI만 구성된 상태이며 구현 예정입니다.
 
 ---
 
-```
+## 🧩 기술 스택 및 선택 이유
+
+| 분류 | 기술 | 선택 이유 |
+|---|---|---|
+| UI | Jetpack Compose, Material3 | 선언형 UI로 상태 변화가 곧 화면 변화가 되도록 구성. 상태 호이스팅으로 화면 간 상태 소유권을 명확히 관리 |
+| 아키텍처 | Clean Architecture, MVVM | 화면 로직과 비즈니스 규칙(검증), 데이터 접근을 분리해 각 계층을 독립적으로 수정 가능하게 |
+| DI | Hilt | Repository·DiaryUseCase·Validator를 인터페이스로 분리하고 구현체를 주입하기 위해 |
+| 로컬 DB | Room | 일기를 폴더·날짜·키워드로 조회해야 해서 쿼리가 가능한 DB가 필요. `Flow` 반환으로 데이터 변경이 화면에 자동 반영 |
+| 설정 저장 | DataStore | 자동 로그인 등 설정값을 코루틴/Flow 기반으로 비동기 저장 (SharedPreferences 대체). 사용자 계정 목록은 kotlinx.serialization JSON으로 저장 |
+| 비동기 | Coroutines, Flow | DB I/O를 메인 스레드에서 분리하고, `StateFlow`/`SharedFlow`로 상태와 일회성 이벤트를 구분 |
+| 인증 | BCrypt, Credential Manager | 비밀번호는 평문 대신 해시로 저장. Google 로그인은 권장 API인 Credential Manager 사용 |
+
+---
+
+## 🏗️ 아키텍처
+
+<img src="docs/architecture.png" alt="Mono Diary 아키텍처 다이어그램"/>
+
+- **UiState:** 화면별 상태 클래스 (`LoginUiState`, `RegisterUiState` 등)
+- **UiEvent:** `SharedFlow`로 로그인 성공, 에러 메시지 같은 일회성 이벤트 전달
+- **Navigation:** `AppNavigation`의 `NavHost` 단일 진입점, `sealed class Screen`으로 라우트 정의
+
+---
+
 ## 📁 프로젝트 구조
+
+```
 com.example.diaryapp
-│
-├── data                                         # 실제 데이터 접근 (Room, DataStore, RepositoryImpl)
+├── data
 │   ├── local
-│   │   ├── datastore                            # DataStore (자동 로그인 등)
-│   │   │   ├── UserLocalDataSource.kt
-│   │   │   └── UserPreferencesSerializer.kt
-│   │   └── room                                 # Room DB (Entity, Dao, Database)
-│   │       ├── Converters.kt
-│   │       ├── DiaryDao.kt
-│   │       ├── DiaryDatabase.kt
-│   │       ├── DiaryEntity.kt
-│   │       ├── FolderDao.kt
-│   │       └── FolderEntity.kt
-│   │
-│   ├── dto                                      # 계층간 전달 객체 (Entity <-> Domain)
-│   │   └── DiaryDto.kt
-│   │
-│   ├── mapper                                   # Entity <-> Domain 변환
-│   │   └── DiaryMapper.kt
-│   │
-│   └── repository                               # Repository 구현체
-│       ├── DiaryRepositoryImpl.kt
-│       └── UserRepositoryImpl.kt
+│   │   ├── dataStore      # 사용자 계정(JSON) / 로그인 설정
+│   │   └── room           # Entity, Dao, Database, TypeConverter
+│   ├── mapper             # Entity <-> Domain 변환
+│   └── repository         # Repository 구현체
 │
-├── domain                                       # 비즈니스 규칙, 엔티티, 유스케이스
-│   ├── model                                    # 순수 도메인 엔티티 (UI/DB와 독립)
-│   │   ├── Diary.kt
-│   │   └── User.kt
-│   │
-│   ├── repository                               # Repository 추상 인터페이스
-│   │   ├── DiaryRepository.kt
-│   │   └── UserRepository.kt
-│   │
-│   ├── validator                                # Domain 검증 규칙 (title/content,folder)
-│   │   ├── DiaryValidator.kt
-│   │   ├── DiaryValidatorImpl.kt
-│   │   ├── FolderValidator.kt
-│   │   └── FolderValidatorImpl.kt
-│   │
-│   └── usecase                                  # 유스케이스 (앱의 비즈니스 흐름)
-│       ├── diary
-│       │   ├── DiaryUseCase.kt
-│       │   └── DiaryUseCaseImpl.kt
-│       └── user
-│           ├── LoginUseCase.kt
-│           ├── RegisterUseCase.kt
-│           ├── AutoLoginUseCase.kt
-│           └── FindPasswordUseCase.kt
+├── domain
+│   ├── model              # 순수 도메인 모델 (UI/DB와 독립)
+│   ├── repository         # Repository 인터페이스
+│   ├── validator          # 일기/폴더 입력 검증 규칙
+│   └── usecase            # diary / user 유스케이스
 │
-├── presentation                                 # UI / ViewModel / Navigation
+├── presentation
 │   ├── ui
-│   │   ├── component                            # 재사용 컴포넌트 (버튼, 카드 등)
-│   │   │   ├── button
-│   │   │   │   ├── BackButton.kt
-│   │   │   │   ├── Button.kt
-│   │   │   │   ├── LoginButton.kt
-│   │   │   │   ├── MoreButton.kt
-│   │   │   │   ├── TextOnlyButton.kt
-│   │   │   │   └── WriteFab.kt
-│   │   │   │
-│   │   │   ├── card
-│   │   │   │   ├── LoginCard.kt
-│   │   │   │   └── TimelineCard.kt
-│   │   │   │
-│   │   │   ├── textfield
-│   │   │   │   ├── IdTextField.kt
-│   │   │   │   └── PasswordTextField.kt
-│   │   │   │
-│   │   │   ├── logo
-│   │   │   │   └── Logo.kt
-│   │   │   │
-│   │   │   └── timeline
-│   │   │       ├── DateHeader.kt
-│   │   │       ├── TimelineEmptyView.kt
-│   │   │       ├── TimelineIndicator.kt
-│   │   │       ├── filterBottomSheet.kt
-│   │   │       ├── DrawerContent.kt
-│   │   │       ├── EditorMode.kt
-│   │   │       ├── BottomNavBar.kt
-│   │   │       └── DiarySearchBar.kt
-│   │   │
-│   │   ├── navigation                            # AppNavgation / route 정의
-│   │   │   └── AppNavigation.kt
-│   │   │
-│   │   ├── screen
-│   │   │   ├── findPassword
-│   │   │   │   ├── FindPasswordScreen.kt
-│   │   │   │   ├── ResetPasswordScreen.kt
-│   │   │   │   └── FindPasswordFlow.kt
-│   │   │   │
-│   │   │   ├── Screen.kt                          # 실제 화면
-│   │   │   ├── LoginScreen.kt
-│   │   │   ├── SignUpScreen.kt
-│   │   │   ├── SplashScreen.kt
-│   │   │   ├── MainScreen.kt
-│   │   │   ├── CommonScreen.kt
-│   │   │   ├── TimelineScreen.kt
-│   │   │   ├── FolderScreen.kt
-│   │   │   ├── FavoritesScreen.kt
-│   │   │   ├── CalendarScreen.kt
-│   │   │   ├── ProfileScreen.kt
-│   │   │   ├── DiaryEditorScreen.kt
-│   │   │   └── DiaryViewScreen.kt
-│   │   │
-│   │   ├── event                                  # Ui Event (sealed class)
-│   │   │   ├── FindPasswordEvent.kt
-│   │   │   ├── ResetPasswordEvent.kt
-│   │   │   ├── RegisterEvent.kt
-│   │   │   └── LoginEvent.kt
-│   │   │
-│   │   ├── uiState                                # Ui 상태 모델
-│   │   │   ├── FindPasswordUiState.kt
-│   │   │   ├── ResetPasswordUiState.kt
-│   │   │   ├── RegisterUiState.kt
-│   │   │   └── LoginUiState.kt
-│   │   │
-│   │   ├── theme
-│   │   │   ├── Color.kt
-│   │   │   ├── Theme.kt
-│   │   │   └── Type.kt
-│   │   │
-│   │   └── dialog                                 # 공용 Dialog Ui
-│   │       └── Dialog.kt
-│   │
-│   └── viewmodel                                  # 화면별 ViewModel (상태 관리 / 유스케이스 호출)
-│       ├── DiaryViewModel.kt
-│       ├── LoginViewModel.kt
-│       ├── RegisterViewModel.kt
-│       ├── FindPasswordViewModel.kt
-│       └── ResetPasswordViewModel.kt
+│   │   ├── component      # 버튼, 카드, 텍스트필드, 타임라인 컴포넌트
+│   │   ├── navigation     # AppNavigation (NavHost 단일 진입점)
+│   │   ├── screen         # 화면 Composable + Screen 라우트 정의
+│   │   ├── event          # 일회성 UI 이벤트 (sealed class)
+│   │   ├── uiState        # 화면별 UI 상태
+│   │   └── theme          # Color / Type / Theme
+│   └── viewmodel          # 화면별 ViewModel
 │
-├── di                           # Hilt DI 모듈
-│   ├── DataStoreModule.kt
-│   ├── RepositoryModule.kt
-│   ├── UseCaseModule.kt
-│   └── ValidatorModule.kt
-│
-├── DiaryApp.kt                  # Application 클래스
-├── MainActivity.kt              # Single Activity
-└── SplashActivity.kt            # 초기 진입 Activity
+├── di                     # Hilt 모듈 (Repository / UseCase / Validator / DataStore)
+├── DiaryApp.kt            # Application 클래스
+├── MainActivity.kt        # Single Activity
+└── SplashActivity.kt      # 초기 진입 Activity
 ```
 
+---
+
+## 🛠️ 트러블슈팅
+
+<a id="ts-1"></a>
+
+### 1. 타임라인/폴더 화면이 필터 상태를 공유하던 문제
+`d0b9329` · 2025.11
+- **원인:** 화면은 분리돼 있었지만 정렬/날짜 필터 상태는 `MainScreen`에 하나만 존재
+- **해결:** `FilterScope(TIMELINE, FOLDER)`를 도입해 화면별 필터 상태를 ViewModel에서 분리
+- **배운 점:** 화면이 다르면 상태의 소유권도 나눠야 한다
+
+<a id="ts-2"></a>
+
+### 2. 자동 로그인이 동작하지 않던 문제
+`2da7d5f` · 2025.11
+- **원인:** 자동 로그인이 수동 로그인 함수를 재사용 → 앱 재시작 직후 비어 있는 입력창 값으로 로그인 시도
+- **해결:** DataStore에 저장된 값을 사용하는 `tryAutoLogin()`으로 분리
+- **배운 점:** 비슷해 보이는 두 흐름도 데이터 출처(UI 입력 vs 영구 저장소)가 다르면 분리해야 한다
+
+<a id="ts-3"></a>
+
+### 3. 에디터 EDIT 모드에 기존 데이터가 채워지지 않던 문제
+`2a3c3a1` · 2025.11
+- **원인:** 초기값을 고정 파라미터로만 받는 구조라 비동기로 불러온 데이터를 반영할 수 없음
+- **해결:** 파라미터로 `id`만 받고, ViewModel에서 로드한 데이터를 `LaunchedEffect`로 반영
+- **배운 점:** 비동기 데이터가 필요한 화면은 식별자만 넘기고 로딩은 상태로 처리한다
+
+<a id="ts-4"></a>
+
+### 4. 뒤로가기 후 드로어 선택 표시가 갱신되지 않던 문제
+`db74436` · 2026.08
+- **원인:** 선택 표시가 클릭 콜백에만 의존 → 클릭을 거치지 않는 시스템 뒤로가기에서는 갱신되지 않음
+- **해결:** `selectedFolder`를 `MainScreen`으로 호이스팅하고 `currentRoute` 변화에서도 갱신
+- **배운 점:** UI 상태는 "마지막 액션"이 아니라 "현재 화면 상태"에서 파생시켜야 한다
+
+---
+
+## 🔁 회고 및 개선 예정
+
+과제 당시에는 Kotlin과 아키텍처를 처음 배우던 시기라, 지금 다시 보며 아래 항목을 개선하려고 합니다.
+
+- [ ] **Flow 구독 누적** — `load*()` 호출마다 새 `collect`가 시작됨 → 입력 상태 + `flatMapLatest`로 전환
+- [ ] **데이터 손실 위험** — `fallbackToDestructiveMigration()` 제거, Room Migration 작성
+- [ ] **의존성 방향 위반** — Domain(`RegisterUseCase`)이 Presentation(`RegisterResult`)을 참조
+- [ ] **계층 우회** — `LoginViewModel`이 UseCase를 거치지 않고 `UserRepository`를 직접 호출
+- [ ] **검증 로직 중복** — 비밀번호 규칙을 `PasswordValidator`로 추출하고 단위 테스트 추가
+- [ ] **폴더 연산 원자성** — 이름 변경/삭제를 `@Transaction`으로 묶기
+- [ ] **비밀번호 재설정** — 본인 확인 단계 추가
+- [ ] **작성 날짜 선택** — 에디터의 날짜 표시가 저장 시각에 반영되지 않음

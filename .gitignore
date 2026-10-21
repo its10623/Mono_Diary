@@ -14,3 +14,10 @@
 .cxx
 local.properties
 .hotswan/
+# 릴리즈 빌드 산출물(aab/apk)은 저장소가 아닌 배포 채널로 관리
+/app/release/
+# Kotlin 컴파일러 캐시 (Kotlin 2.x)
+.kotlin/
+# AI 작업 지침 (로컬 경로 포함, 개인용)
+/AGENTS.md
+/CLAUDE.md
