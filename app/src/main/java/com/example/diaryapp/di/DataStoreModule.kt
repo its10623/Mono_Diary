@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.example.diaryapp.data.local.room.DiaryDao
 import com.example.diaryapp.data.local.room.DiaryDatabase
 import com.example.diaryapp.data.local.room.FolderDao
+import com.example.diaryapp.data.local.room.MIGRATION_2_3
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,7 +26,10 @@ object DataStoreModule {
             context,
             DiaryDatabase::class.java,
             "diary_db"
-        ).fallbackToDestructiveMigration().build()
+        )
+            // 스키마 변경 시 기존 일기를 지우지 않도록 버전별 Migration으로만 업그레이드한다
+            .addMigrations(MIGRATION_2_3)
+            .build()
 
     @Provides
     fun provideDiaryDao(

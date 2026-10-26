@@ -60,6 +60,11 @@ kotlin {
     }
 }
 
+// Room 스키마를 JSON으로 내보내 버전별 변경 이력을 남긴다 (Migration 작성·검증의 기준)
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     // 구글 로그인 및 인증 (최신 버전 사용)
     implementation("com.google.android.gms:play-services-auth:21.2.0")
