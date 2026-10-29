@@ -144,12 +144,14 @@ com.example.diaryapp
 
 ## 🔁 회고 및 개선 예정
 
-과제 당시에는 Kotlin과 아키텍처를 처음 배우던 시기라, 지금 다시 보며 아래 항목을 개선하려고 합니다.
+과제 당시에는 Kotlin과 아키텍처를 처음 배우던 시기라, 지금 다시 보며 아래 항목을 하나씩 개선하고 있습니다. 완료한 항목은 커밋과 실기기 검증 결과를 함께 남겼습니다.
 
-- [ ] **Flow 구독 누적** — `load*()` 호출마다 새 `collect`가 시작됨 → 입력 상태 + `flatMapLatest`로 전환
-- [ ] **데이터 손실 위험** — `fallbackToDestructiveMigration()` 제거, Room Migration 작성
-- [ ] **의존성 방향 위반** — Domain(`RegisterUseCase`)이 Presentation(`RegisterResult`)을 참조
-- [ ] **계층 우회** — `LoginViewModel`이 UseCase를 거치지 않고 `UserRepository`를 직접 호출
+- [x] **Flow 구독 누적** — `load*()` 호출마다 새 `collect`가 시작됨 → 입력 상태 + `flatMapLatest`로 전환 (`1811606`)
+  - 즐겨찾기 화면에서 토글하면 전체 목록으로 바뀌던 문제도 함께 해결
+- [x] **데이터 손실 위험** — `fallbackToDestructiveMigration()` 제거, Room Migration 작성 (`2ff9ca7`)
+  - v2 DB에서 업그레이드 검증: 일기 유지, `diary.folder` 값을 `folders` 테이블로 옮겨 폴더 목록 복원
+- [x] **의존성 방향 위반** — Domain(`RegisterUseCase`)이 Presentation(`RegisterResult`)을 참조 → `RegisterResult`를 domain으로 이동 (`9a26814`)
+- [x] **계층 우회** — `LoginViewModel`·`FindPasswordViewModel`이 UseCase를 거치지 않고 `UserRepository`를 직접 호출 → 자동 로그인 판단·로그아웃 등을 UseCase로 이동 (`9a26814`)
 - [ ] **검증 로직 중복** — 비밀번호 규칙을 `PasswordValidator`로 추출하고 단위 테스트 추가
 - [ ] **폴더 연산 원자성** — 이름 변경/삭제를 `@Transaction`으로 묶기
 - [ ] **비밀번호 재설정** — 본인 확인 단계 추가
