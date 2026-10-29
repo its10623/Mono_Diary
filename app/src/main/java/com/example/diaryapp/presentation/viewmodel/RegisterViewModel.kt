@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.diaryapp.domain.usecase.user.RegisterResult
 import com.example.diaryapp.domain.usecase.user.RegisterUseCase
 import com.example.diaryapp.presentation.ui.event.RegisterEvent
 import com.example.diaryapp.presentation.ui.uiState.RegisterUiState
@@ -75,9 +76,3 @@ class RegisterViewModel @Inject constructor(
         }
     }
 }
-
-sealed class RegisterResult {
-    object Success : RegisterResult()
-    data class Fail(val message: String) : RegisterResult()
-}
-

@@ -1,7 +1,6 @@
 package com.example.diaryapp.domain.usecase.user
 
 import com.example.diaryapp.domain.repository.UserRepository
-import com.example.diaryapp.presentation.viewmodel.RegisterResult
 import javax.inject.Inject
 
 class RegisterUseCase @Inject constructor(
@@ -31,4 +30,10 @@ class RegisterUseCase @Inject constructor(
         val success = repo.register(userName, password)
         return if (success) RegisterResult.Success else RegisterResult.Fail("이미 존재하는 아이디 입니다")
     }
+}
+
+// 회원가입 결과: domain 계층에 두어 presentation에 의존하지 않도록 한다
+sealed class RegisterResult {
+    object Success : RegisterResult()
+    data class Fail(val message: String) : RegisterResult()
 }

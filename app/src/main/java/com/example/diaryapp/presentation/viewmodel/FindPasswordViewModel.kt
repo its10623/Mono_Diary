@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.diaryapp.domain.repository.UserRepository
+import com.example.diaryapp.domain.usecase.user.FindPasswordUseCase
 import com.example.diaryapp.presentation.ui.event.FindPasswordEvent
 import com.example.diaryapp.presentation.ui.uiState.FindPasswordUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,7 +16,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class FindPasswordViewModel @Inject constructor(
-    private val repo: UserRepository
+    private val findPasswordUseCase: FindPasswordUseCase
 ) : ViewModel() {
 
     var uiState by mutableStateOf(FindPasswordUiState())
@@ -52,12 +52,12 @@ class FindPasswordViewModel @Inject constructor(
             // 로딩 시작
             uiState = uiState.copy(isLoading = true)
 
-            // DB/UserRepository 검증
-            val user = repo.findUser(id)
+            // 가입 여부 확인은 domain(UseCase)에 맡긴다
+            val isRegistered = findPasswordUseCase.isRegistered(id)
 
             uiState = uiState.copy(isLoading = false)
 
-            if (user != null) {
+            if (isRegistered) {
                 _event.emit(FindPasswordEvent.Success(id))
             } else {
                 uiState = uiState.copy(idError = "존재하지 않는 아이디입니다.")

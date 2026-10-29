@@ -6,6 +6,10 @@ import javax.inject.Inject
 class FindPasswordUseCase @Inject constructor(
     private val repo: UserRepository
 ) {
+    // 비밀번호 찾기 1단계: 입력한 아이디가 가입된 계정인지 확인
+    suspend fun isRegistered(userName: String): Boolean =
+        repo.findUser(userName) != null
+
     suspend operator fun invoke(
         userName: String,
         newPassword: String,

@@ -13,4 +13,8 @@ class LoginUseCase @Inject constructor(
 
         return repo.login(userName, password)
     }
+
+    // Google 로그인: Credential Manager로 받은 계정 정보를 로그인 상태로 저장
+    suspend fun saveGoogleLogin(email: String, idToken: String) =
+        repo.saveGoogleLoginInfo(email = email, idToken = idToken)
 }
