@@ -6,6 +6,7 @@ import com.example.diaryapp.domain.usecase.diary.DiaryUseCase
 import com.example.diaryapp.domain.model.Diary
 import com.example.diaryapp.presentation.ui.component.timeline.SortType
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -14,6 +15,9 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -39,13 +43,43 @@ class DiaryViewModel @Inject constructor(
     private val _deleteSuccess = MutableSharedFlow<Boolean>()
     val deleteSuccess = _deleteSuccess.asSharedFlow()
 
-    // 다이어리 리스트 상태
-    private val _diaryList = MutableStateFlow(emptyList<Diary>())
-    val diaryList: StateFlow<List<Diary>> = _diaryList.asStateFlow()
+    // 타임라인 리스트 상태
+    // load*()마다 collect를 새로 시작하면 이전 구독이 남아 서로 덮어쓰므로,
+    // "지금 무엇을 볼지"를 상태 하나로 두고 flatMapLatest로 이전 구독을 취소하며 전환한다
+    private val timelineSource = MutableStateFlow<TimelineSource?>(null)
 
-    // 폴더 리스트 상태
-    private val _folderDiaryList = MutableStateFlow<List<Diary>>(emptyList())
-    val folderDiaryList: StateFlow<List<Diary>> = _folderDiaryList.asStateFlow()
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val diaryList: StateFlow<List<Diary>> = timelineSource
+        .filterNotNull()
+        .flatMapLatest { source ->
+            when (source) {
+                is TimelineSource.All -> diaryUseCase.getDiariesByUser(source.userName)
+                is TimelineSource.Favorites -> diaryUseCase.getFavoriteDiaries(source.userName)
+                is TimelineSource.Search -> diaryUseCase.searchTimeline(source.userName, source.keyword)
+                is TimelineSource.DateRange ->
+                    diaryUseCase.filterByDate(source.userName, source.start, source.end)
+            }
+                // 안쪽에서 잡아야 오류가 나도 바깥 스트림이 끝나지 않고 다음 소스로 계속 전환된다
+                .catch { e -> _errorMessage.value = e.message }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    // 폴더 화면 리스트 상태 (타임라인과 같은 방식: 입력 상태 + flatMapLatest)
+    private val folderSource = MutableStateFlow<FolderSource?>(null)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val folderDiaryList: StateFlow<List<Diary>> = folderSource
+        .filterNotNull()
+        .flatMapLatest { source ->
+            when (source) {
+                is FolderSource.All ->
+                    diaryUseCase.getDiariesByFolder(source.userName, source.folder)
+                is FolderSource.Search ->
+                    diaryUseCase.searchInFolder(source.userName, source.folder, source.keyword)
+            }
+                .catch { e -> _errorMessage.value = e.message }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _timelineSort = MutableStateFlow(SortType.RECENT)
     val timelineSortType = _timelineSort.asStateFlow()
@@ -59,8 +93,16 @@ class DiaryViewModel @Inject constructor(
     private val _folderDates = MutableStateFlow<Set<LocalDate>>(emptySet())
     val folderDates = _folderDates.asStateFlow()
 
-    private val _selectedDiary = MutableStateFlow<Diary?>(null)
-    val selectedDiary = _selectedDiary.asStateFlow()
+    // 상세·수정 화면에서 보고 있는 일기 id (null이면 선택 해제)
+    private val selectedId = MutableStateFlow<Int?>(null)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val selectedDiary: StateFlow<Diary?> = selectedId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(null)
+            else diaryUseCase.getDiaryById(id).catch { e -> _errorMessage.value = e.message }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _activeFilter = MutableStateFlow(false)
     val activeFilter = _activeFilter.asStateFlow()
@@ -83,7 +125,7 @@ class DiaryViewModel @Inject constructor(
     // 타임라인 스크린 적용 필터
     val filteredDiaryList: StateFlow<List<Diary>> =
         combine(
-            _diaryList,
+            diaryList,
             _timelineSort,
             _timelineDates
         ) { diaries, sort, dates ->
@@ -119,7 +161,7 @@ class DiaryViewModel @Inject constructor(
     // 폴더 스크린 적용 필터
     val filteredFolderList: StateFlow<List<Diary>> =
         combine(
-            _folderDiaryList,
+            folderDiaryList,
             _folderSort,
             _folderDates
         ) { diaries, sort, dates ->
@@ -143,53 +185,41 @@ class DiaryViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun loadDiary(id: Int) {
-        viewModelScope.launch {
-            diaryUseCase.getDiaryById(id)
-                .catch { e -> _errorMessage.value = e.message }
-                .collect { diary -> _selectedDiary.value = diary }
-        }
+        selectedId.value = id
     }
 
-    private val _folders = MutableStateFlow(emptyList<String>())
-    val folders: StateFlow<List<String>> = _folders.asStateFlow()
+    // 드로어 폴더 목록: 사용자 이름을 입력 상태로 두고 구독을 하나로 유지
+    private val folderUser = MutableStateFlow<String?>(null)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val folders: StateFlow<List<String>> = folderUser
+        .filterNotNull()
+        .flatMapLatest { userName ->
+            diaryUseCase.getFolders(userName).catch { e -> _errorMessage.value = e.message }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun loadFolders(userName: String) {
-        viewModelScope.launch {
-            diaryUseCase.getFolders(userName)
-                .catch { e -> _errorMessage.value = e.message }
-                .collect { list -> _folders.value = list.toList() }
-        }
+        folderUser.value = userName
     }
 
     fun loadUserDiaries(userName: String) {
-        viewModelScope.launch {
-            diaryUseCase.getDiariesByUser(userName)
-                .catch { e -> _errorMessage.value = e.message }
-                .collect { list -> _diaryList.value = list.toList() }
-        }
+        timelineSource.value = TimelineSource.All(userName)
     }
 
     fun loadFolderDiaries(userName: String, folder: String) {
-        viewModelScope.launch {
-            diaryUseCase.getDiariesByFolder(userName, folder)
-                .catch { e -> _errorMessage.value = e.message }
-                .collect { list -> _folderDiaryList.value = list.toList() }
-        }
+        folderSource.value = FolderSource.All(userName, folder)
     }
 
     fun loadFavoriteDiaries(userName: String) {
-        viewModelScope.launch {
-            diaryUseCase.getFavoriteDiaries(userName)
-                .catch { e -> _errorMessage.value = e.message }
-                .collect { list -> _diaryList.value = list.toList() }
-        }
+        timelineSource.value = TimelineSource.Favorites(userName)
     }
 
+    // 아래 쓰기 함수들은 목록을 다시 불러오지 않는다: 구독 중인 Room Flow가 변경을 자동으로 다시 방출한다
     fun toggleFavoriteStatus(id: Int, isFavorite: Boolean, userName: String) {
         viewModelScope.launch {
             try {
                 diaryUseCase.toggleFavoriteStatus(id, isFavorite)
-                loadUserDiaries(userName)
             } catch (e: Exception) {
                 _errorMessage.value = e.message
             }
@@ -197,27 +227,15 @@ class DiaryViewModel @Inject constructor(
     }
 
     fun searchInFolder(user: String, folder: String, keyword: String) {
-        viewModelScope.launch {
-            diaryUseCase.searchInFolder(user, folder, keyword)
-                .catch { e -> _errorMessage.value = e.message }
-                .collect { _folderDiaryList.value = it.toList() }
-        }
+        folderSource.value = FolderSource.Search(user, folder, keyword)
     }
 
     fun searchTimeline(userName: String, keyword: String) {
-        viewModelScope.launch {
-            diaryUseCase.searchTimeline(userName, keyword)
-                .catch { _errorMessage.value = it.message }
-                .collect { _diaryList.value = it.toList() }
-        }
+        timelineSource.value = TimelineSource.Search(userName, keyword)
     }
 
     fun filterDate(userName: String, start: Long, end: Long) {
-        viewModelScope.launch {
-            diaryUseCase.filterByDate(userName, start, end)
-                .catch { e -> _errorMessage.value = e.message }
-                .collect { list -> _diaryList.value = list.toList() }
-        }
+        timelineSource.value = TimelineSource.DateRange(userName, start, end)
     }
 
     fun writeDiary(diary: Diary) {
@@ -225,7 +243,6 @@ class DiaryViewModel @Inject constructor(
             try {
                 diaryUseCase.writeDiary(diary)
                 _writeSuccess.emit(true)
-                loadUserDiaries(diary.userName)
             } catch (e: Exception) {
                 _errorMessage.value = e.message
             }
@@ -257,7 +274,6 @@ class DiaryViewModel @Inject constructor(
             try {
                 diaryUseCase.updateDiary(diary)
                 _updateSuccess.emit(true)
-                loadUserDiaries(diary.userName)
             } catch (e: Exception) {
                 _errorMessage.value = e.message
             }
@@ -268,9 +284,8 @@ class DiaryViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 diaryUseCase.deleteDiary(id)
-                _selectedDiary.value = null
+                selectedId.value = null
                 _deleteSuccess.emit(true)
-                loadUserDiaries(userName)
             } catch (e: Exception) {
                 _errorMessage.value = e.message
             }
@@ -281,7 +296,6 @@ class DiaryViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 diaryUseCase.addFolder(userName, folderName)
-                loadFolders(userName)
             } catch (e: Exception) {
                 _errorMessage.value = e.message
             }
@@ -332,8 +346,31 @@ class DiaryViewModel @Inject constructor(
     }
 
     fun clearSelected() {
-        _selectedDiary.value = null
+        selectedId.value = null
     }
 }
 
 enum class FilterScope { TIMELINE, FOLDER }
+
+// 타임라인(전체·즐겨찾기 화면 공용)에 무엇을 보여줄지 나타내는 입력 상태
+private sealed interface TimelineSource {
+    val userName: String
+
+    data class All(override val userName: String) : TimelineSource
+    data class Favorites(override val userName: String) : TimelineSource
+    data class Search(override val userName: String, val keyword: String) : TimelineSource
+    data class DateRange(override val userName: String, val start: Long, val end: Long) : TimelineSource
+}
+
+// 폴더 화면에 무엇을 보여줄지 나타내는 입력 상태
+private sealed interface FolderSource {
+    val userName: String
+    val folder: String
+
+    data class All(override val userName: String, override val folder: String) : FolderSource
+    data class Search(
+        override val userName: String,
+        override val folder: String,
+        val keyword: String
+    ) : FolderSource
+}
